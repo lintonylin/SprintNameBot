@@ -50,8 +50,9 @@ SprintNameBot is a real-time collaborative tool that helps engineering teams gen
 2. Open [http://127.0.0.1:12345](http://127.0.0.1:12345) in your web browser.
 3. Enter a username and click "Join Session".
 4. Configure your sprint name request and click "Get Suggestions".
-5. (Optional if you need public access) Run `npx localtunnel -p 12345`
-6. (Optional if you need public access) Copy the url into the html file and replace the `serverUrl`
+5. (If you need public access) Run `npx localtunnel -p 12345`
+6. (If you need public access) Copy the url into the html file and replace the `serverUrl`
+7. (If you need public access) Visit the public url created by localtunnel and share it with your team member!
 
 ## Usage Examples
 
