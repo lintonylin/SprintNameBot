@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sprint Name Generator</title>
+  <!-- Load Socket.IO from a CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.0/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    /* Overall page layout */
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      padding: 20px;
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    /* Container for two-column layout */
+    #container {
+      display: flex;
+      gap: 20px;
+    }
+    #leftPane, #rightPane {
+      flex: 1;
+    }
+    /* Chat area styling */
+    #chat {
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 60vh; /* 60% of viewport height */
+      overflow-y: auto;
+      margin-bottom: 15px;
+      background: #f9f9f9;
+    }
+    #chat p {
+      margin: 5px 0;
+    }
+    /* Voting panel styling */
+    #votingOptions {
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 60vh;
+      overflow-y: auto;
+      background: #f0f0f0;
+    }
+    .option {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+      padding: 5px;
+      border-bottom: 1px solid #ddd;
+    }
+    .option span {
+      margin-right: 10px;
+    }
+    .form-section {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 15px;
+    }
+    label {
+      margin-right: 5px;
+    }
+    /* Spinner styling */
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sprint Name Generator</h1>
+
+  <!-- Session Join Section -->
+  <div class="form-section">
+    <label for="username">Username:</label>
+    <input type="text" id="username" placeholder="Your name">
+    <button onclick="joinSession()">Join Session</button>
+  </div>
+
+
+  <div id="container">
+    <!-- Left Pane: Chat and Suggestion Section -->
+    <div id="leftPane">
+    <!-- Chat History -->
+    <div id="chat">
+      <p><em>Shared chat history will appear here...</em></p>
+    </div>
+    <!-- Generate Suggestions Section -->
+    <div class="form-section">
+      <label for="letter">Starting Letter:</label>
+      <input type="text" id="letter" maxlength="1" placeholder="A">
+      <label for="topic">Topic:</label>
+      <input type="text" id="topic" placeholder="unusual measurement units">
+      <label for="message">Message:</label>
+      <input type="text" id="message" placeholder="top 3 suggestions">
+      <button id="getSuggestionsButton" onclick="getSuggestions()">Get Suggestions</button>
+      <span id="spinner" class="spinner hidden"></span>
+    </div>
+    </div>
+    <!-- Right Pane: Voting Panel -->
+    <div id="rightPane">
+      <h2>Voting Options</h2>
+      <div class="form-section">
+        <input type="text" id="optionInput" placeholder="Paste option text here">
+        <button onclick="addOption()">Add Option</button>
+        <button onclick="clearOptions()">Clear Options</button>
+        <button onclick="clearVotes()">Clear Votes</button>
+      </div>
+      <div id="votingOptions">
+        <!-- Live voting options will be displayed here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let socket;
+    const room = "default";
+    const chatHistory = document.getElementById("chat");
+    const votingOptionsDiv = document.getElementById("votingOptions");
+    const host = "http://127.0.0.1";
+    const port = "12345";
+    // const serverUrl = `${host}:${port}`;
+
+    // Replace the URL if testing with Ngrok or a live server
+    const serverUrl = "https://warm-needles-cross.loca.lt"
+
+    // Utility function to append a message to the chat history
+    function appendMessage(text) {
+      const p = document.createElement("p");
+      const html = marked.parse(text);
+      p.innerHTML = html;
+      chatHistory.appendChild(p);
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    // Function to join the shared session
+    function joinSession() {
+      let username = document.getElementById("username").value || "Anonymous";
+      // Store the username in localStorage for future visits
+      localStorage.setItem("username", username);
+      
+      // Initialize Socket.IO connection to the specified endpoint
+      socket = io(serverUrl);
+
+      // Listen for status messages from the server
+      socket.on("status", function(data) {
+        appendMessage(`<strong>Status:</strong> ${data.msg}`);
+      });
+
+      // Listen for chat messages from other users
+      socket.on("chat", function(data) {
+        appendMessage(data);
+      });
+
+      // Listen for live voting options updates.
+      socket.on("option_update", function(data) {
+        updateVotingOptions(data.options);
+      });
+
+      // Emit join event with the chosen username and room
+      socket.emit("join", { username: username, room: room });
+      appendMessage(`<em>You have joined the session as ${username}.</em>`);
+    }
+
+    // Update the voting options list on the right panel.
+    function updateVotingOptions(options) {
+      votingOptionsDiv.innerHTML = "";
+      options.forEach((option, index) => {
+        const div = document.createElement("div");
+        div.className = "option";
+        div.innerHTML = `<span>${option.text} (Votes: ${option.votes})</span>
+                        <button onclick="voteOption(${index})">Vote</button>`;
+        votingOptionsDiv.appendChild(div);
+      });
+    }
+
+    // Emit an event to add a new voting option.
+    function addOption() {
+      const optionInput = document.getElementById("optionInput");
+      const text = optionInput.value.trim();
+      if (!text) return;
+      socket.emit("add_option", { text: text, room: room });
+      optionInput.value = "";
+    }
+
+    // Emit an event to vote on an option by index.
+    function voteOption(index) {
+      socket.emit("vote_option", { index: index, room: room });
+    }
+
+    // Emit an event to clear all voting options.
+    function clearOptions() {
+      socket.emit("clear_options", { room: room });
+    }
+
+    // Emit an event to clear all votes.
+    function clearVotes() {
+      socket.emit("clear_votes", { room: room });
+    }
+
+    // Function to call the /generate endpoint and broadcast suggestions
+    function getSuggestions() {
+      const button = document.getElementById("getSuggestionsButton");
+      const spinner = document.getElementById("spinner");
+      
+      // Disable button and show spinner
+      button.disabled = true;
+      spinner.classList.remove("hidden");
+
+      const letter = document.getElementById("letter").value || "A";
+      const topic = document.getElementById("topic").value || "unusual measurement units";
+      const username = document.getElementById("username").value || "Anonymous";
+      const message = document.getElementById("message").value || "top 3 suggestions";
+
+      // Call the backend /generate endpoint using the full URL
+      fetch(serverUrl + "/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ letter: letter, topic: topic, content: message })
+      })
+      .then(response => response.json())
+      .then(data => {
+        const suggestion = "<br><br><strong>" + username + "</strong>: " + message + "\t" + "<br><br><strong>Suggestions:</strong> " + data + "<br><br>";
+        appendMessage(suggestion);
+          // Broadcast the suggestion to all connected clients
+          if (socket) {
+            socket.emit("chat", { username: username, message: `${suggestion}` });
+          }
+      })
+      .catch(error => {
+        console.error("Error fetching suggestions:", error);
+        appendMessage("<em>Error fetching suggestions.</em>");
+      })
+      .finally(() => {
+        // Re-enable button and hide spinner regardless of outcome.
+        button.disabled = false;
+        spinner.classList.add("hidden");
+      });;
+    }
+  </script>
+</body>
+</html>
